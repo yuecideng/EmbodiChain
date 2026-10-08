@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import dexsim
 import pytest
+from types import SimpleNamespace
 
-from dexsim.types import DenoiserType, Renderer, ToneMappingType
+from dexsim.types import Renderer, ToneMappingType
 
+from embodichain.lab.sim import cfg as sim_cfg
 from embodichain.lab.sim.cfg import ArticulationCfg, PhysicsCfg, RenderCfg, RobotCfg
 
 
@@ -83,14 +85,35 @@ def test_physics_cfg_applies_fixed_solver_defaults() -> None:
     assert physics_args["enable_friction_every_iteration"] is True
 
 
-def test_render_cfg_applies_default_denoiser() -> None:
-    """Rendering always uses the default OptiX denoiser."""
-    world_config = dexsim.WorldConfig()
+@pytest.mark.parametrize("enum_available", [True, False])
+@pytest.mark.parametrize("fields_available", [True, False])
+def test_render_cfg_applies_supported_default_denoiser_fields(
+    monkeypatch: pytest.MonkeyPatch, enum_available: bool, fields_available: bool
+) -> None:
+    """Optional SDK fields receive OptiX when supported and stay absent otherwise."""
+    previous_denoiser, optix = object(), object()
+    enum = SimpleNamespace(OPTIX=optix) if enum_available else None
+    monkeypatch.setattr(sim_cfg, "DenoiserType", enum)
+    raytrace = SimpleNamespace(render_iterations_per_frame=0)
+    if fields_available:
+        raytrace.open_denoise = False
+        raytrace.denoiser_type = previous_denoiser
+    world_config = SimpleNamespace(
+        raytrace_config=raytrace, postprocess_config=SimpleNamespace()
+    )
 
-    RenderCfg(renderer="hybrid").apply_to_dexsim_config(world_config)
+    RenderCfg(renderer="hybrid", spp=4).apply_to_dexsim_config(world_config)
 
-    assert world_config.raytrace_config.open_denoise is True
-    assert world_config.raytrace_config.denoiser_type == DenoiserType.OPTIX
+    assert world_config.renderer == Renderer.HYBRID
+    assert raytrace.render_iterations_per_frame == 4
+    if fields_available:
+        assert raytrace.open_denoise is True
+        assert raytrace.denoiser_type is (
+            optix if enum_available else previous_denoiser
+        )
+    else:
+        assert not hasattr(raytrace, "open_denoise")
+        assert not hasattr(raytrace, "denoiser_type")
 
 
 def test_render_cfg_does_not_expose_denoiser_options() -> None:

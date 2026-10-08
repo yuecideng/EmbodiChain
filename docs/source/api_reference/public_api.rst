@@ -1885,6 +1885,19 @@ embodichain_tasks.configs
 
    get_config_path
 
+embodichain_tasks.manipulation.pick_place
+-----------------------------------------
+
+Single-cycle cube placement with a reset-sampled visual target, optional expert
+correction, and configurable grasp-frame calibration. Robot and camera
+components are supplied by the task deployment.
+
+.. currentmodule:: embodichain_tasks.manipulation.pick_place
+
+.. autosummary::
+
+   PickPlaceEnv
+
 embodichain_tasks.manipulation.push_cube
 ----------------------------------------
 

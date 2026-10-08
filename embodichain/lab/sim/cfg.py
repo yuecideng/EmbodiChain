@@ -28,7 +28,6 @@ from typing import Sequence, Dict, Literal, List, Any, Optional
 from dataclasses import field, MISSING
 
 from dexsim.types import (
-    DenoiserType,
     Renderer,
     ToneMappingType,
     PhysicalAttr,
@@ -40,6 +39,11 @@ from dexsim.types import (
     SoftBodyMaterialModel,
     ClothBodyAttr,
 )
+
+try:
+    from dexsim.types import DenoiserType
+except ImportError:  # DexSim builds without the optional denoiser enum.
+    DenoiserType = None  # type: ignore[assignment,misc]
 from embodichain.utils import configclass, is_configclass
 from embodichain.data.constants import EMBODICHAIN_DEFAULT_DATA_ROOT
 from embodichain.data import get_data_path
@@ -121,8 +125,11 @@ class RenderCfg:
         """
         world_config.renderer = self.to_dexsim_flags()
         world_config.raytrace_config.render_iterations_per_frame = self.spp
-        world_config.raytrace_config.open_denoise = True
-        world_config.raytrace_config.denoiser_type = DenoiserType.OPTIX
+        raytrace_config = world_config.raytrace_config
+        if hasattr(raytrace_config, "open_denoise"):
+            raytrace_config.open_denoise = True
+        if DenoiserType is not None and hasattr(raytrace_config, "denoiser_type"):
+            raytrace_config.denoiser_type = DenoiserType.OPTIX
         world_config.postprocess_config.tone_mapping_enabled = self.tone_mapping_enabled
         world_config.postprocess_config.tone_mapping_type = (
             ToneMappingType.MODIFIED_REINHARD

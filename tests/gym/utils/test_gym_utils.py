@@ -41,7 +41,8 @@ from embodichain.lab.gym.utils.gym_utils import (
     merge_args_with_gym_config,
     init_rollout_buffer_from_config,
 )
-from embodichain.lab.sim.robots import URRobotCfg
+from embodichain.lab.sim.robots import FrankaPandaCfg, URRobotCfg
+from embodichain.lab.sim.cfg import ObjectBaseCfg
 from embodichain.lab.sim.sensors import CameraCfg
 from embodichain.utils.utility import load_config, save_config
 
@@ -699,6 +700,58 @@ class TestConfigToCfgFromFile:
         assert cfg.task_program is None
         assert config == original
 
+    @pytest.mark.parametrize(
+        "deployment_name",
+        [
+            "ood",
+            "smoke_train",
+            "smoke_train_runtime",
+            "smoke_val",
+            "smoke_val_runtime",
+            "test_id",
+            "train",
+            "val_id",
+        ],
+    )
+    def test_pick_deployment_faces_workspace_without_changing_embodiment(
+        self, deployment_name: str
+    ) -> None:
+        """Pick overrides the root yaw and preserves shared joints and sensors."""
+        path = (
+            _REPOSITORY_ROOT
+            / "embodichain_tasks/configs/tasks/manipulation/pick_place"
+            / f"task.franka_{deployment_name}.yaml"
+        )
+        config = load_config(path)
+        original = deepcopy(config)
+        cfg = config_to_cfg(
+            config, manager_modules=DEFAULT_MANAGER_MODULES, source_path=path
+        )
+        baseline = FrankaPandaCfg.from_dict({"robot_type": "panda"})
+        assert isinstance(cfg.robot, FrankaPandaCfg)
+        assert cfg.robot.init_rot == [0.0, 0.0, 154.0]
+        assert cfg.robot.init_pos == baseline.init_pos
+        assert cfg.robot.init_qpos == baseline.init_qpos
+        assert cfg.robot.qpos_limits == baseline.qpos_limits
+        assert cfg.robot.drive_pros.to_dict() == baseline.drive_pros.to_dict()
+        assert config == original
+        # ObjectBaseCfg owns the documented conversion from degrees to root pose.
+        pose_cfg = ObjectBaseCfg.from_dict(
+            {"init_rot": cfg.robot.init_rot, "init_pos": cfg.robot.init_pos}
+        )
+        yaw_rad = np.deg2rad(154.0)
+        np.testing.assert_allclose(
+            pose_cfg.init_local_pose[:3, 0],
+            [np.cos(yaw_rad), np.sin(yaw_rad), 0.0],
+            atol=1e-12,
+        )
+        component = load_config(_COMPONENT_ROOT / "embodiments/franka_panda_vla.yaml")
+        assert "init_rot" not in component["simulation"]
+        assert list(baseline.init_rot) == [0.0, 0.0, 0.0]
+        assert len(cfg.sensor) == 1
+        expected_camera = CameraCfg.from_dict(component["sensor"][0])
+        assert cfg.sensor[0].to_dict() == expected_camera.to_dict()
+
     def test_handwritten_config_composes_environment_without_task_program(
         self,
         tmp_path,
@@ -720,6 +773,28 @@ class TestConfigToCfgFromFile:
         assert cfg.max_episode_steps == 1200
         assert [rigid.uid for rigid in cfg.rigid_object] == ["cube"]
         assert cfg.task_program is None
+
+    @pytest.mark.parametrize(
+        ("env_config", "expected"),
+        [
+            ({}, False),
+            ({"ignore_terminations": True}, True),
+            ({"ignore_terminations": False}, False),
+        ],
+    )
+    def test_config_to_cfg_maps_ignore_terminations_without_changing_default(
+        self, env_config, expected
+    ) -> None:
+        """The static Gym env field reaches EnvCfg and preserves its default."""
+        config = {
+            "id": "EmbodiedEnv-v1",
+            "env": env_config,
+            "robot": {"uid": "TestRobot"},
+        }
+
+        cfg = config_to_cfg(config, manager_modules=DEFAULT_MANAGER_MODULES)
+
+        assert cfg.ignore_terminations is expected
 
     def test_removed_task_component_selector_fails_closed(self) -> None:
         """The former mixed-ownership component cannot be silently ignored."""

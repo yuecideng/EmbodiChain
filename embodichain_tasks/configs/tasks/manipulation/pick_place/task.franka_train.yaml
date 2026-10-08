@@ -1,0 +1,9 @@
+id: PickPlace-v1
+environment:
+  component: env_train.yaml
+embodiment:
+  component: ../../../components/embodiments/franka_panda_vla.yaml
+  # Face the cube and target workspace while retaining neutral joint positions.
+  overrides:
+    init_rot: [0.0, 0.0, 154.0]
+seed: 4201

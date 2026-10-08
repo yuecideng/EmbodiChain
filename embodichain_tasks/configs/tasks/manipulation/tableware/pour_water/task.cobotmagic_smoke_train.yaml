@@ -1,0 +1,10 @@
+id: PourWater-v1
+environment:
+  component: env_smoke_train.yaml
+task_program:
+  program: task_program/program.yaml
+  integration: task_program/integration.yaml
+  execution_policy: ../../../../components/execution_policies/trajectory_open_loop_dense.yaml
+embodiment:
+  component: ../../../../components/embodiments/cobotmagic_vla.yaml
+seed: 5101
